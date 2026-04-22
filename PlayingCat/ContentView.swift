@@ -9,12 +9,15 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var eyesLookUp = false
+    @State private var floatingFruitNames: [String] = []
+    @State private var floatingFruitFrames: [String: CGRect] = [:]
+    @State private var panelItemFrames: [String: CGRect] = [:]
+    @State private var dragOffsets: [String: CGSize] = [:]
+    @State private var matchedFruits: Set<String> = []
+
     private let topFruits = ["bananaImage", "appleImage", "raspberryImage", "strawberryImage", "kiwiImage"]
     private let selectedFruits = ["strawberryButtonImage", "kiwiButtonImage"]
     private let basketFruits = ["raspberryButtonImage", "appleButtonImage", "bananaButtonImage"]
-    
-    private var shouldRansomiseFruits: Bool = false
-    private var randomTopFruits: [String] { shouldRansomiseFruits ? Array(topFruits.shuffled().prefix(3)) : Array(topFruits.prefix(3))}
 
     var body: some View {
         GeometryReader { geometry in
@@ -58,7 +61,7 @@ struct ContentView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, -16)
 
-                    floatingFruits(size: geometry.size.width * 0.3, fruits: randomTopFruits)
+                    floatingFruits(size: geometry.size.width * 0.3, fruits: floatingFruitNames)
 
                     Spacer(minLength: 0)
 
@@ -66,6 +69,12 @@ struct ContentView: View {
                         .padding(.bottom, 16)
                 }
                 .ignoresSafeArea(edges: .bottom)
+            }
+            .coordinateSpace(name: "gameArea")
+            .onAppear {
+                if floatingFruitNames.isEmpty {
+                    floatingFruitNames = Array(topFruits.shuffled().prefix(3))
+                }
             }
         }
     }
@@ -80,26 +89,26 @@ struct ContentView: View {
 
     private func floatingFruits(size: CGFloat, fruits: [String]) -> some View {
         HStack {
-            Image(fruits[0])
-                .resizable()
-                .scaledToFit()
-                .frame(width: size, height: size * 1.2)
+            if fruits.indices.contains(0) {
+                floatingFruitImage(fruit: fruits[0], size: size)
+            }
 
             Spacer()
 
-            Image(fruits[2])
-                .resizable()
-                .scaledToFit()
-                .frame(width: size, height: size * 1.2)
+            if fruits.indices.contains(2) {
+                floatingFruitImage(fruit: fruits[2], size: size)
+            }
         }
         .padding(.horizontal, 12)
         .overlay {
-            Image(fruits[1])
-                .resizable()
-                .scaledToFit()
-                .frame(width: size, height: size * 1.2)
-                .offset(x: 10)
-                .padding(.top, -size / 1.0)
+            if fruits.indices.contains(1) {
+                floatingFruitImage(fruit: fruits[1], size: size)
+                    .offset(x: 10)
+                    .padding(.top, -size / 1.0)
+            }
+        }
+        .onPreferenceChange(FloatingFruitFrameKey.self) { value in
+            floatingFruitFrames.merge(value) { _, new in new }
         }
     }
 
@@ -107,22 +116,25 @@ struct ContentView: View {
         VStack {
             HStack(spacing: 18) {
                 ForEach(selectedFruits, id: \.self) { fruit in
-                    gameCircleButton(imageName: fruit, size: size)
+                    draggablePanelFruit(imageName: fruit, size: size)
                 }
             }
 
             HStack(spacing: 18) {
                 ForEach(basketFruits, id: \.self) { fruit in
-                    gameCircleButton(imageName: fruit, size: size)
+                    draggablePanelFruit(imageName: fruit, size: size)
                 }
             }
         }
         .frame(maxWidth: .infinity)
+        .onPreferenceChange(PanelFruitFrameKey.self) { value in
+            panelItemFrames.merge(value) { _, new in new }
+        }
     }
 
     private func gameCircleButton(imageName: String, size: CGFloat) -> some View {
         Button {
-            // UI scaffold only.
+            // Top controls action placeholder.
         } label: {
             Image(imageName)
                 .resizable()
@@ -130,6 +142,102 @@ struct ContentView: View {
                 .frame(width: size, height: size)
         }
         .buttonStyle(.plain)
+    }
+
+    private func floatingFruitImage(fruit: String, size: CGFloat) -> some View {
+        Image(fruit)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size * 1.2)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: FloatingFruitFrameKey.self,
+                        value: [fruit: proxy.frame(in: .named("gameArea"))]
+                    )
+                }
+            )
+            .overlay {
+                if matchedFruits.contains(fruit) {
+                    Image(buttonImageName(for: fruit))
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: size * 0.45, height: size * 0.45)
+                }
+            }
+    }
+
+    private func draggablePanelFruit(imageName: String, size: CGFloat) -> some View {
+        let fruitName = fruitName(for: imageName)
+        let isMatched = matchedFruits.contains(fruitName)
+
+        return Image(imageName)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .opacity(isMatched ? 0 : 1)
+            .allowsHitTesting(!isMatched)
+            .offset(dragOffsets[imageName] ?? .zero)
+            .background(
+                GeometryReader { proxy in
+                    Color.clear.preference(
+                        key: PanelFruitFrameKey.self,
+                        value: [imageName: proxy.frame(in: .named("gameArea"))]
+                    )
+                }
+            )
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        dragOffsets[imageName] = value.translation
+                    }
+                    .onEnded { value in
+                        handleDrop(imageName: imageName, translation: value.translation)
+                    }
+            )
+            .animation(.easeOut(duration: 0.18), value: dragOffsets[imageName] ?? .zero)
+            .animation(.easeOut(duration: 0.2), value: isMatched)
+    }
+
+    private func handleDrop(imageName: String, translation: CGSize) {
+        let fruitName = fruitName(for: imageName)
+        defer { dragOffsets[imageName] = .zero }
+
+        guard
+            let sourceFrame = panelItemFrames[imageName],
+            let targetFrame = floatingFruitFrames[fruitName]
+        else {
+            return
+        }
+
+        let movedFrame = sourceFrame.offsetBy(dx: translation.width, dy: translation.height)
+        if movedFrame.intersects(targetFrame) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                matchedFruits.insert(fruitName)
+            }
+        }
+    }
+
+    private func fruitName(for buttonImageName: String) -> String {
+        buttonImageName.replacingOccurrences(of: "ButtonImage", with: "Image")
+    }
+
+    private func buttonImageName(for fruitName: String) -> String {
+        fruitName.replacingOccurrences(of: "Image", with: "ButtonImage")
+    }
+}
+
+private struct FloatingFruitFrameKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
+    }
+}
+
+private struct PanelFruitFrameKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
+    static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
+        value.merge(nextValue()) { _, new in new }
     }
 }
 
