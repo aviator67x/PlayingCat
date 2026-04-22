@@ -201,12 +201,13 @@ struct ContentView: View {
 
     private func handleDrop(imageName: String, translation: CGSize) {
         let fruitName = fruitName(for: imageName)
-        defer { dragOffsets[imageName] = .zero }
-
         guard
             let sourceFrame = panelItemFrames[imageName],
             let targetFrame = floatingFruitFrames[fruitName]
         else {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                dragOffsets[imageName] = .zero
+            }
             return
         }
 
@@ -214,6 +215,11 @@ struct ContentView: View {
         if movedFrame.intersects(targetFrame) {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 matchedFruits.insert(fruitName)
+                dragOffsets[imageName] = .zero
+            }
+        } else {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                dragOffsets[imageName] = .zero
             }
         }
     }
