@@ -8,10 +8,13 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var eyesLookUp = false
     private let topFruits = ["bananaImage", "appleImage", "raspberryImage", "strawberryImage", "kiwiImage"]
-    private var randomTopFruits: [String] { Array(topFruits.shuffled().prefix(3)) }
     private let selectedFruits = ["strawberryButtonImage", "kiwiButtonImage"]
     private let basketFruits = ["raspberryButtonImage", "appleButtonImage", "bananaButtonImage"]
+    
+    private var shouldRansomiseFruits: Bool = false
+    private var randomTopFruits: [String] { shouldRansomiseFruits ? Array(topFruits.shuffled().prefix(3)) : Array(topFruits.prefix(3))}
 
     var body: some View {
         GeometryReader { geometry in
@@ -23,6 +26,30 @@ struct ContentView: View {
                     Image("kittenBaseImage")
                         .resizable()
                         .scaledToFit()
+                        .overlay {
+                            Image("eyesImage")
+                                .resizable()
+                                .scaledToFit()
+                                .scaleEffect(0.4)
+                                .rotation3DEffect(
+                                    .degrees(eyesLookUp ? 0 : -35),
+                                    axis: (x: 1, y: 0, z: 0),
+                                    perspective: 0
+                                )
+                                .offset(y: eyesLookUp ? -geometry.size.width * 0.2 : -geometry.size.width * 0.22)
+                        }
+                        .overlay {
+                            Image("eyeLidsImage")
+                                .resizable()
+                                .scaledToFit()
+                                .scaleEffect(0.4)
+                                .offset(y: -geometry.size.width * 0.2)
+                        }
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
+                                eyesLookUp = true
+                            }
+                        }
                 }
                 .ignoresSafeArea(edges: .all)
 
