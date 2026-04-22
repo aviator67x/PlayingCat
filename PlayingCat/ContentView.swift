@@ -212,7 +212,12 @@ struct ContentView: View {
         }
 
         let movedFrame = sourceFrame.offsetBy(dx: translation.width, dy: translation.height)
-        if movedFrame.intersects(targetFrame) {
+        let overlapRect = movedFrame.intersection(targetFrame)
+        let overlapArea = overlapRect.isNull ? 0 : overlapRect.width * overlapRect.height
+        let draggableArea = movedFrame.width * movedFrame.height
+        let overlapRatio = draggableArea > 0 ? overlapArea / draggableArea : 0
+
+        if overlapRatio >= 0.2 {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 matchedFruits.insert(fruitName)
                 dragOffsets[imageName] = .zero
