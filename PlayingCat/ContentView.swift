@@ -157,14 +157,20 @@ struct ContentView: View {
                     )
                 }
             )
-            .overlay {
-                if matchedFruits.contains(fruit) {
-                    Image(buttonImageName(for: fruit))
+            .overlay(
+                Color.white.opacity(matchedFruits.contains(fruit) ? 0 : 0.5)
+                       .mask( Image(fruit)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: size * 0.45, height: size * 0.45)
-                }
-            }
+                        .frame(width: size, height: size * 1.2)))
+//            .overlay {
+//                if matchedFruits.contains(fruit) {
+//                    Image(buttonImageName(for: fruit))
+//                        .resizable()
+//                        .scaledToFit()
+//                        .frame(width: size * 0.45, height: size * 0.45)
+//                }
+//            }
     }
 
     private func draggablePanelFruit(imageName: String, size: CGFloat) -> some View {
@@ -220,7 +226,7 @@ struct ContentView: View {
         if overlapRatio >= 0.2 {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 matchedFruits.insert(fruitName)
-                dragOffsets[imageName] = .zero
+//                dragOffsets[imageName] = .zero
             }
         } else {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
