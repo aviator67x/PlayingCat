@@ -5,8 +5,8 @@
 //  Created by Andrew Kasilov on 21.04.26.
 //
 
-import SwiftUI
 import AVFoundation
+import SwiftUI
 
 struct ContentView: View {
     @State private var levelAudio = LevelCompleteAudioPlayer()
@@ -61,46 +61,46 @@ struct ContentView: View {
                             .scaledToFit()
                             .opacity(isLevelCompleted ? 1 : 0)
                     }
-                        .overlay {
-                            Image("eyesImage")
-                                .resizable()
-                                .scaledToFit()
-                                .scaleEffect(0.4)
-                                .rotation3DEffect(
-                                    .degrees(eyesLookUp ? 0 : -35),
-                                    axis: (x: 1, y: 0, z: 0),
-                                    perspective: 0
-                                )
-                                .offset(
-                                    x: eyesHorizontalShift,
-                                    y: eyesLookUp ? -geometry.size.width * 0.19 : -geometry.size.width * 0.22
-                                )
-                                .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
-                        }
-                        .overlay {
-                            Image("eyeLidsImage")
-                                .resizable()
-                                .scaledToFit()
-                                .scaleEffect(0.4)
-                                .offset(y: -geometry.size.width * 0.2)
-                                .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
-                        }
-                        .animation(.easeInOut(duration: 0.3), value: showHappyCat)
-                        .animation(.easeInOut(duration: 0.3), value: showSadCat)
-                        .animation(.easeInOut(duration: 0.35), value: isLevelCompleted)
-                        .onAppear {
+                    .overlay {
+                        Image("eyesImage")
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(0.4)
+                            .rotation3DEffect(
+                                .degrees(eyesLookUp ? 0 : -35),
+                                axis: (x: 1, y: 0, z: 0),
+                                perspective: 0
+                            )
+                            .offset(
+                                x: eyesHorizontalShift,
+                                y: eyesLookUp ? -geometry.size.width * 0.19 : -geometry.size.width * 0.22
+                            )
+                            .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
+                    }
+                    .overlay {
+                        Image("eyeLidsImage")
+                            .resizable()
+                            .scaledToFit()
+                            .scaleEffect(0.4)
+                            .offset(y: -geometry.size.width * 0.2)
+                            .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
+                    }
+                    .animation(.easeInOut(duration: 0.3), value: showHappyCat)
+                    .animation(.easeInOut(duration: 0.3), value: showSadCat)
+                    .animation(.easeInOut(duration: 0.35), value: isLevelCompleted)
+                    .onAppear {
+                        startEyesAnimationIfNeeded()
+                    }
+                    .onChange(of: isPaused) { _, paused in
+                        if paused {
+                            stopEyesAnimation()
+                        } else {
                             startEyesAnimationIfNeeded()
                         }
-                        .onChange(of: isPaused) { _, paused in
-                            if paused {
-                                stopEyesAnimation()
-                            } else {
-                                startEyesAnimationIfNeeded()
-                            }
-                        }
-                        .onDisappear {
-                            stopEyesAnimation()
-                        }
+                    }
+                    .onDisappear {
+                        stopEyesAnimation()
+                    }
                 }
                 .ignoresSafeArea(edges: .all)
 
@@ -258,18 +258,10 @@ struct ContentView: View {
             )
             .overlay(
                 Color.white.opacity(matchedFruits.contains(fruit) ? 0 : 0.5)
-                       .mask( Image(fruit)
+                    .mask(Image(fruit)
                         .resizable()
                         .scaledToFit()
                         .frame(width: size, height: size * 1.2)))
-//            .overlay {
-//                if matchedFruits.contains(fruit) {
-//                    Image(buttonImageName(for: fruit))
-//                        .resizable()
-//                        .scaledToFit()
-//                        .frame(width: size * 0.45, height: size * 0.45)
-//                }
-//            }
     }
 
     private func draggablePanelFruit(imageName: String, size: CGFloat) -> some View {
@@ -337,10 +329,7 @@ struct ContentView: View {
         let isCorrectMatch = correctOverlap >= 0.2
 
         if isCorrectMatch {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                matchedFruits.insert(fruitName)
-//                dragOffsets[imageName] = .zero
-            }
+            matchedFruits.insert(fruitName)
             triggerHappyCatAnimation()
             if matchedFruits.count == floatingFruitNames.count, !floatingFruitNames.isEmpty {
                 completeLevel()
@@ -397,13 +386,13 @@ struct ContentView: View {
 
     private func togglePause() {
         guard !isLevelCompleted else { return }
-            isPaused = true
+        isPaused = true
     }
 
     private func continueGame() {
         guard !isLevelCompleted else { return }
         if isPaused {
-                isPaused = false
+            isPaused = false
         }
     }
 
@@ -411,10 +400,10 @@ struct ContentView: View {
         guard eyesAnimationTask == nil, !isPaused else { return }
         eyesAnimationTask = Task {
             while !Task.isCancelled {
-                let halfCycle: Double = 0.75
+                let halfCycle = 0.75
                 let horizontalShift: CGFloat = 4
                 let shortStep: UInt64 = 250_000_000
-                let longStep: UInt64 = 1500_000_000
+                let longStep: UInt64 = 1_500_000_000
 
                 await MainActor.run {
                     // Start going up and left at the same moment.
@@ -614,7 +603,7 @@ private final class LevelCompleteAudioPlayer: NSObject, AVAudioPlayerDelegate {
 }
 
 private struct ConfettiView: View {
-    private let pieces: [ConfettiPiece] = (0..<24).map { _ in ConfettiPiece.random }
+    private let pieces: [ConfettiPiece] = (0 ..< 24).map { _ in ConfettiPiece.random }
 
     var body: some View {
         GeometryReader { geometry in
