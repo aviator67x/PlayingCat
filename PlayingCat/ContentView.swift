@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var eyesLookUp = false
     @State private var showHappyCat = false
     @State private var showSadCat = false
+    @State private var isLevelCompleted = true//false
     @State private var happyResetTask: Task<Void, Never>?
     @State private var sadResetTask: Task<Void, Never>?
     @State private var floatingFruitNames: [String] = []
@@ -30,11 +31,15 @@ struct ContentView: View {
                     Image("bgImage")
                         .resizable()
 
+                    Color.black
+                        .opacity(isLevelCompleted ? 0.5 : 0)
+                        .ignoresSafeArea()
+
                     ZStack {
                         Image("kittenBaseImage")
                             .resizable()
                             .scaledToFit()
-                            .opacity((showHappyCat || showSadCat) ? 0 : 1)
+                            .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
 
                         Image("kittenHappyImage")
                             .resizable()
@@ -45,6 +50,11 @@ struct ContentView: View {
                             .resizable()
                             .scaledToFit()
                             .opacity(showSadCat ? 1 : 0)
+
+                        Image("kittenVictoryImage")
+                            .resizable()
+                            .scaledToFit()
+                            .opacity(isLevelCompleted ? 1 : 0)
                     }
                         .overlay {
                             Image("eyesImage")
@@ -57,7 +67,7 @@ struct ContentView: View {
                                     perspective: 0
                                 )
                                 .offset(y: eyesLookUp ? -geometry.size.width * 0.2 : -geometry.size.width * 0.22)
-                                .opacity((showHappyCat || showSadCat) ? 0 : 1)
+                                .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
                         }
                         .overlay {
                             Image("eyeLidsImage")
@@ -65,10 +75,11 @@ struct ContentView: View {
                                 .scaledToFit()
                                 .scaleEffect(0.4)
                                 .offset(y: -geometry.size.width * 0.2)
-                                .opacity((showHappyCat || showSadCat) ? 0 : 1)
+                                .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
                         }
                         .animation(.easeInOut(duration: 0.3), value: showHappyCat)
                         .animation(.easeInOut(duration: 0.3), value: showSadCat)
+                        .animation(.easeInOut(duration: 0.35), value: isLevelCompleted)
                         .onAppear {
                             withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
                                 eyesLookUp = true
@@ -78,18 +89,33 @@ struct ContentView: View {
                 .ignoresSafeArea(edges: .all)
 
                 VStack(spacing: 0) {
-                    topControls(size: geometry.size.width * 0.15)
-                        .padding(.horizontal, 16)
-                        .padding(.top, -16)
+                    if !isLevelCompleted {
+                        topControls(size: geometry.size.width * 0.15)
+                            .padding(.horizontal, 16)
+                            .padding(.top, -16)
+                    }
 
-                    floatingFruits(size: geometry.size.width * 0.3, fruits: floatingFruitNames)
+                    if !isLevelCompleted {
+                        floatingFruits(size: geometry.size.width * 0.3, fruits: floatingFruitNames)
+                    }
 
                     Spacer(minLength: 0)
 
-                    selectionPanel(size: geometry.size.width * 0.26)
-                        .padding(.bottom, 16)
+                    if isLevelCompleted {
+                        levelCompleteControls(size: geometry.size.width * 0.26)
+                            .padding(.bottom, 22)
+                    } else {
+                        selectionPanel(size: geometry.size.width * 0.26)
+                            .padding(.bottom, 16)
+                    }
                 }
                 .ignoresSafeArea(edges: .bottom)
+
+                if isLevelCompleted {
+                    ConfettiView()
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
             }
             .coordinateSpace(name: "gameArea")
             .onAppear {
@@ -151,6 +177,39 @@ struct ContentView: View {
         .onPreferenceChange(PanelFruitFrameKey.self) { value in
             panelItemFrames.merge(value) { _, new in new }
         }
+    }
+
+    private func levelCompleteControls(size: CGFloat) -> some View {
+        HStack(spacing: size * 0.3) {
+            completionControlButton(imageName: "replayButtonImage", size: size)
+            completionControlButton(imageName: "playButtonImage", size: size)
+        }
+        .frame(maxWidth: .infinity)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func completionControlButton(imageName: String, size: CGFloat) -> some View {
+        Button {
+            // Level-complete controls action placeholder.
+        } label: {
+            ZStack {
+                Color.white
+                    .opacity(0.32)
+                    .frame(width: size * 1.34, height: size * 1.34)
+                    .mask(
+                        Image(imageName)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: size * 1.34, height: size * 1.34)
+                    )
+
+                Image(imageName)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size, height: size)
+            }
+        }
+        .buttonStyle(.plain)
     }
 
     private func gameCircleButton(imageName: String, size: CGFloat) -> some View {
@@ -227,6 +286,7 @@ struct ContentView: View {
     }
 
     private func handleDrop(imageName: String, translation: CGSize) {
+        guard !isLevelCompleted else { return }
         let fruitName = fruitName(for: imageName)
         guard
             let sourceFrame = panelItemFrames[imageName]
@@ -260,9 +320,12 @@ struct ContentView: View {
         if isCorrectMatch {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 matchedFruits.insert(fruitName)
-                dragOffsets[imageName] = .zero
+//                dragOffsets[imageName] = .zero
             }
             triggerHappyCatAnimation()
+            if matchedFruits.count == floatingFruitNames.count, !floatingFruitNames.isEmpty {
+                completeLevel()
+            }
         } else {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
                 dragOffsets[imageName] = .zero
@@ -270,6 +333,16 @@ struct ContentView: View {
             if isDroppedOnAnyFloatingFruit {
                 triggerSadCatAnimation()
             }
+        }
+    }
+
+    private func completeLevel() {
+        happyResetTask?.cancel()
+        sadResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.4)) {
+            showHappyCat = false
+            showSadCat = false
+            isLevelCompleted = true
         }
     }
 
@@ -335,6 +408,63 @@ private struct PanelFruitFrameKey: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue()) { _, new in new }
+    }
+}
+
+private struct ConfettiView: View {
+    private let pieces: [ConfettiPiece] = (0..<24).map { _ in ConfettiPiece.random }
+
+    var body: some View {
+        GeometryReader { geometry in
+            TimelineView(.animation) { timeline in
+                let time = timeline.date.timeIntervalSinceReferenceDate
+                ZStack {
+                    ForEach(Array(pieces.enumerated()), id: \.offset) { _, piece in
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(piece.color)
+                            .frame(width: piece.size.width, height: piece.size.height)
+                            .rotationEffect(.degrees(piece.rotation + time * piece.spinSpeed))
+                            .position(
+                                x: piece.xRatio * geometry.size.width + sin(time * piece.wobbleSpeed) * piece.wobbleDistance,
+                                y: piece.yPosition(time: time, height: geometry.size.height)
+                            )
+                    }
+                }
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
+private struct ConfettiPiece {
+    let xRatio: CGFloat
+    let fallDuration: Double
+    let delay: Double
+    let size: CGSize
+    let rotation: Double
+    let spinSpeed: Double
+    let wobbleDistance: Double
+    let wobbleSpeed: Double
+    let color: Color
+
+    func yPosition(time: TimeInterval, height: CGFloat) -> CGFloat {
+        let cycleTime = max(0.1, time + delay)
+        let progress = cycleTime.truncatingRemainder(dividingBy: fallDuration) / fallDuration
+        return progress * (height + 80) - 40
+    }
+
+    static var random: ConfettiPiece {
+        ConfettiPiece(
+            xRatio: .random(in: 0.05...0.95),
+            fallDuration: .random(in: 2.0...3.8),
+            delay: .random(in: 0...2),
+            size: CGSize(width: .random(in: 6...12), height: .random(in: 10...18)),
+            rotation: .random(in: 0...360),
+            spinSpeed: .random(in: 50...180),
+            wobbleDistance: .random(in: 6...20),
+            wobbleSpeed: .random(in: 1.2...2.6),
+            color: [.yellow, .orange, .pink, .mint, .blue, .purple].randomElement() ?? .yellow
+        )
     }
 }
 
