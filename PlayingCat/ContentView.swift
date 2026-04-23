@@ -11,18 +11,17 @@ struct ContentView: View {
     @State private var eyesLookUp = false
     @State private var showHappyCat = false
     @State private var showSadCat = false
-    @State private var isLevelCompleted = true//false
+    @State private var isLevelCompleted = false
     @State private var happyResetTask: Task<Void, Never>?
     @State private var sadResetTask: Task<Void, Never>?
     @State private var floatingFruitNames: [String] = []
+    @State private var selectionFruitButtons: [String] = []
     @State private var floatingFruitFrames: [String: CGRect] = [:]
     @State private var panelItemFrames: [String: CGRect] = [:]
     @State private var dragOffsets: [String: CGSize] = [:]
     @State private var matchedFruits: Set<String> = []
 
     private let topFruits = ["bananaImage", "appleImage", "raspberryImage", "strawberryImage", "kiwiImage"]
-    private let selectedFruits = ["strawberryButtonImage", "kiwiButtonImage"]
-    private let basketFruits = ["raspberryButtonImage", "appleButtonImage", "bananaButtonImage"]
 
     var body: some View {
         GeometryReader { geometry in
@@ -119,8 +118,8 @@ struct ContentView: View {
             }
             .coordinateSpace(name: "gameArea")
             .onAppear {
-                if floatingFruitNames.isEmpty {
-                    floatingFruitNames = Array(topFruits.shuffled().prefix(3))
+                if floatingFruitNames.isEmpty || selectionFruitButtons.isEmpty {
+                    setupNewShuffledLevel()
                 }
             }
         }
@@ -162,13 +161,13 @@ struct ContentView: View {
     private func selectionPanel(size: CGFloat) -> some View {
         VStack {
             HStack(spacing: 18) {
-                ForEach(selectedFruits, id: \.self) { fruit in
+                ForEach(Array(selectionFruitButtons.prefix(2)), id: \.self) { fruit in
                     draggablePanelFruit(imageName: fruit, size: size)
                 }
             }
 
             HStack(spacing: 18) {
-                ForEach(basketFruits, id: \.self) { fruit in
+                ForEach(Array(selectionFruitButtons.dropFirst(2)), id: \.self) { fruit in
                     draggablePanelFruit(imageName: fruit, size: size)
                 }
             }
@@ -181,16 +180,16 @@ struct ContentView: View {
 
     private func levelCompleteControls(size: CGFloat) -> some View {
         HStack(spacing: size * 0.3) {
-            completionControlButton(imageName: "replayButtonImage", size: size)
-            completionControlButton(imageName: "playButtonImage", size: size)
+            completionControlButton(imageName: "replayButtonImage", size: size, action: restartCurrentLevel)
+            completionControlButton(imageName: "playButtonImage", size: size, action: startNextShuffledLevel)
         }
         .frame(maxWidth: .infinity)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
-    private func completionControlButton(imageName: String, size: CGFloat) -> some View {
+    private func completionControlButton(imageName: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button {
-            // Level-complete controls action placeholder.
+            action()
         } label: {
             ZStack {
                 Color.white
@@ -344,6 +343,36 @@ struct ContentView: View {
             showSadCat = false
             isLevelCompleted = true
         }
+    }
+
+    private func restartCurrentLevel() {
+        happyResetTask?.cancel()
+        sadResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.35)) {
+            showHappyCat = false
+            showSadCat = false
+            isLevelCompleted = false
+            matchedFruits.removeAll()
+            dragOffsets.removeAll()
+            floatingFruitFrames.removeAll()
+            panelItemFrames.removeAll()
+        }
+    }
+
+    private func startNextShuffledLevel() {
+        setupNewShuffledLevel()
+        restartCurrentLevel()
+    }
+
+    private func setupNewShuffledLevel() {
+        let newFloating = Array(topFruits.shuffled().prefix(3))
+        let extraFruits = Array(topFruits.filter { !newFloating.contains($0) }.shuffled().prefix(2))
+        let newSelectionButtons = (newFloating + extraFruits)
+            .map(buttonImageName(for:))
+            .shuffled()
+
+        floatingFruitNames = newFloating
+        selectionFruitButtons = newSelectionButtons
     }
 
     private func triggerHappyCatAnimation() {
