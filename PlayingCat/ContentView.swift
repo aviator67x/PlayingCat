@@ -9,6 +9,10 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var eyesLookUp = false
+    @State private var showHappyCat = false
+    @State private var showSadCat = false
+    @State private var happyResetTask: Task<Void, Never>?
+    @State private var sadResetTask: Task<Void, Never>?
     @State private var floatingFruitNames: [String] = []
     @State private var floatingFruitFrames: [String: CGRect] = [:]
     @State private var panelItemFrames: [String: CGRect] = [:]
@@ -26,9 +30,22 @@ struct ContentView: View {
                     Image("bgImage")
                         .resizable()
 
-                    Image("kittenBaseImage")
-                        .resizable()
-                        .scaledToFit()
+                    ZStack {
+                        Image("kittenBaseImage")
+                            .resizable()
+                            .scaledToFit()
+                            .opacity((showHappyCat || showSadCat) ? 0 : 1)
+
+                        Image("kittenHappyImage")
+                            .resizable()
+                            .scaledToFit()
+                            .opacity(showHappyCat ? 1 : 0)
+
+                        Image("kittenSadImage")
+                            .resizable()
+                            .scaledToFit()
+                            .opacity(showSadCat ? 1 : 0)
+                    }
                         .overlay {
                             Image("eyesImage")
                                 .resizable()
@@ -40,6 +57,7 @@ struct ContentView: View {
                                     perspective: 0
                                 )
                                 .offset(y: eyesLookUp ? -geometry.size.width * 0.2 : -geometry.size.width * 0.22)
+                                .opacity((showHappyCat || showSadCat) ? 0 : 1)
                         }
                         .overlay {
                             Image("eyeLidsImage")
@@ -47,7 +65,10 @@ struct ContentView: View {
                                 .scaledToFit()
                                 .scaleEffect(0.4)
                                 .offset(y: -geometry.size.width * 0.2)
+                                .opacity((showHappyCat || showSadCat) ? 0 : 1)
                         }
+                        .animation(.easeInOut(duration: 0.3), value: showHappyCat)
+                        .animation(.easeInOut(duration: 0.3), value: showSadCat)
                         .onAppear {
                             withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
                                 eyesLookUp = true
@@ -208,8 +229,7 @@ struct ContentView: View {
     private func handleDrop(imageName: String, translation: CGSize) {
         let fruitName = fruitName(for: imageName)
         guard
-            let sourceFrame = panelItemFrames[imageName],
-            let targetFrame = floatingFruitFrames[fruitName]
+            let sourceFrame = panelItemFrames[imageName]
         else {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
                 dragOffsets[imageName] = .zero
@@ -218,19 +238,79 @@ struct ContentView: View {
         }
 
         let movedFrame = sourceFrame.offsetBy(dx: translation.width, dy: translation.height)
-        let overlapRect = movedFrame.intersection(targetFrame)
-        let overlapArea = overlapRect.isNull ? 0 : overlapRect.width * overlapRect.height
         let draggableArea = movedFrame.width * movedFrame.height
-        let overlapRatio = draggableArea > 0 ? overlapArea / draggableArea : 0
+        guard draggableArea > 0 else {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
+                dragOffsets[imageName] = .zero
+            }
+            return
+        }
 
-        if overlapRatio >= 0.2 {
+        let overlapRatios = floatingFruitFrames.mapValues { frame -> CGFloat in
+            let overlapRect = movedFrame.intersection(frame)
+            let overlapArea = overlapRect.isNull ? 0 : overlapRect.width * overlapRect.height
+            return overlapArea / draggableArea
+        }
+
+        let maxOverlap = overlapRatios.values.max() ?? 0
+        let isDroppedOnAnyFloatingFruit = maxOverlap >= 0.2
+        let correctOverlap = overlapRatios[fruitName] ?? 0
+        let isCorrectMatch = correctOverlap >= 0.2
+
+        if isCorrectMatch {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 matchedFruits.insert(fruitName)
-//                dragOffsets[imageName] = .zero
+                dragOffsets[imageName] = .zero
             }
+            triggerHappyCatAnimation()
         } else {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.8)) {
                 dragOffsets[imageName] = .zero
+            }
+            if isDroppedOnAnyFloatingFruit {
+                triggerSadCatAnimation()
+            }
+        }
+    }
+
+    private func triggerHappyCatAnimation() {
+        sadResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showSadCat = false
+        }
+        happyResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showHappyCat = true
+        }
+
+        happyResetTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if Task.isCancelled { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    showHappyCat = false
+                }
+            }
+        }
+    }
+
+    private func triggerSadCatAnimation() {
+        happyResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showHappyCat = false
+        }
+        sadResetTask?.cancel()
+        withAnimation(.easeInOut(duration: 0.25)) {
+            showSadCat = true
+        }
+
+        sadResetTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if Task.isCancelled { return }
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.35)) {
+                    showSadCat = false
+                }
             }
         }
     }
