@@ -11,6 +11,7 @@ import AVFoundation
 struct ContentView: View {
     @State private var levelAudio = LevelCompleteAudioPlayer()
     @State private var eyesLookUp = false
+    @State private var eyesHorizontalShift: CGFloat = 0
     @State private var isPaused = false
     @State private var eyesAnimationTask: Task<Void, Never>?
     @State private var showHappyCat = false
@@ -70,7 +71,10 @@ struct ContentView: View {
                                     axis: (x: 1, y: 0, z: 0),
                                     perspective: 0
                                 )
-                                .offset(y: eyesLookUp ? -geometry.size.width * 0.2 : -geometry.size.width * 0.22)
+                                .offset(
+                                    x: eyesHorizontalShift,
+                                    y: eyesLookUp ? -geometry.size.width * 0.19 : -geometry.size.width * 0.22
+                                )
                                 .opacity((showHappyCat || showSadCat || isLevelCompleted) ? 0 : 1)
                         }
                         .overlay {
@@ -407,12 +411,52 @@ struct ContentView: View {
         guard eyesAnimationTask == nil, !isPaused else { return }
         eyesAnimationTask = Task {
             while !Task.isCancelled {
+                let halfCycle: Double = 0.75
+                let horizontalShift: CGFloat = 4
+                let shortStep: UInt64 = 250_000_000
+                let longStep: UInt64 = 1500_000_000
+
                 await MainActor.run {
-                    withAnimation(.easeInOut(duration: 1.5)) {
-                        eyesLookUp.toggle()
+                    // Start going up and left at the same moment.
+                    withAnimation(.easeInOut(duration: halfCycle)) {
+                        eyesLookUp = true
+                    }
+                    withAnimation(.easeOut(duration: 0.375)) {
+                        eyesHorizontalShift = horizontalShift
                     }
                 }
-                try? await Task.sleep(nanoseconds: 1_500_000_000)
+
+                // Reach top while returning X back to center.
+                try? await Task.sleep(nanoseconds: shortStep)
+                if Task.isCancelled { break }
+
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        eyesHorizontalShift = 0
+                    }
+                }
+                try? await Task.sleep(nanoseconds: longStep * 3)
+                if Task.isCancelled { break }
+
+                // Start going down and right at the same moment.
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: halfCycle)) {
+                        eyesLookUp = false
+                    }
+                    withAnimation(.easeOut(duration: 0.375)) {
+                        eyesHorizontalShift = -horizontalShift * 2
+                    }
+                }
+                try? await Task.sleep(nanoseconds: shortStep)
+                if Task.isCancelled { break }
+
+                // Reach bottom while returning X to center.
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        eyesHorizontalShift = 0
+                    }
+                }
+                try? await Task.sleep(nanoseconds: longStep)
             }
         }
     }
