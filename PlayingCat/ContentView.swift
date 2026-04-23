@@ -11,6 +11,8 @@ import AVFoundation
 struct ContentView: View {
     @State private var levelAudio = LevelCompleteAudioPlayer()
     @State private var eyesLookUp = false
+    @State private var isPaused = false
+    @State private var eyesAnimationTask: Task<Void, Never>?
     @State private var showHappyCat = false
     @State private var showSadCat = false
     @State private var isLevelCompleted = false
@@ -83,9 +85,17 @@ struct ContentView: View {
                         .animation(.easeInOut(duration: 0.3), value: showSadCat)
                         .animation(.easeInOut(duration: 0.35), value: isLevelCompleted)
                         .onAppear {
-                            withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
-                                eyesLookUp = true
+                            startEyesAnimationIfNeeded()
+                        }
+                        .onChange(of: isPaused) { _, paused in
+                            if paused {
+                                stopEyesAnimation()
+                            } else {
+                                startEyesAnimationIfNeeded()
                             }
+                        }
+                        .onDisappear {
+                            stopEyesAnimation()
                         }
                 }
                 .ignoresSafeArea(edges: .all)
@@ -97,19 +107,22 @@ struct ContentView: View {
                             .padding(.top, -16)
                     }
 
-                    if !isLevelCompleted {
-                        floatingFruits(size: geometry.size.width * 0.3, fruits: floatingFruitNames)
-                    }
+                    Group {
+                        if !isLevelCompleted {
+                            floatingFruits(size: geometry.size.width * 0.3, fruits: floatingFruitNames)
+                        }
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
 
-                    if isLevelCompleted {
-                        levelCompleteControls(size: geometry.size.width * 0.26)
-                            .padding(.bottom, 22)
-                    } else {
-                        selectionPanel(size: geometry.size.width * 0.26)
-                            .padding(.bottom, 16)
+                        if isLevelCompleted {
+                            levelCompleteControls(size: geometry.size.width * 0.26)
+                                .padding(.bottom, 22)
+                        } else {
+                            selectionPanel(size: geometry.size.width * 0.26)
+                                .padding(.bottom, 16)
+                        }
                     }
+                    .allowsHitTesting(!isPaused)
                 }
                 .ignoresSafeArea(edges: .bottom)
 
@@ -130,9 +143,9 @@ struct ContentView: View {
 
     private func topControls(size: CGFloat) -> some View {
         HStack {
-            gameCircleButton(imageName: "pauseButtonImage", size: size)
+            gameCircleButton(imageName: "pauseButtonImage", size: size, action: togglePause)
             Spacer()
-            gameCircleButton(imageName: "levelButtonImage", size: size)
+            gameCircleButton(imageName: "levelButtonImage", size: size, action: continueGame)
         }
     }
 
@@ -214,9 +227,9 @@ struct ContentView: View {
         .buttonStyle(.plain)
     }
 
-    private func gameCircleButton(imageName: String, size: CGFloat) -> some View {
+    private func gameCircleButton(imageName: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button {
-            // Top controls action placeholder.
+            action()
         } label: {
             Image(imageName)
                 .resizable()
@@ -288,7 +301,7 @@ struct ContentView: View {
     }
 
     private func handleDrop(imageName: String, translation: CGSize) {
-        guard !isLevelCompleted else { return }
+        guard !isLevelCompleted, !isPaused else { return }
         let fruitName = fruitName(for: imageName)
         guard
             let sourceFrame = panelItemFrames[imageName]
@@ -364,6 +377,7 @@ struct ContentView: View {
             showHappyCat = false
             showSadCat = false
             isLevelCompleted = false
+            isPaused = false
             showConfetti = false
             matchedFruits.removeAll()
             dragOffsets.removeAll()
@@ -375,6 +389,37 @@ struct ContentView: View {
     private func startNextShuffledLevel() {
         setupNewShuffledLevel()
         restartCurrentLevel()
+    }
+
+    private func togglePause() {
+        guard !isLevelCompleted else { return }
+            isPaused = true
+    }
+
+    private func continueGame() {
+        guard !isLevelCompleted else { return }
+        if isPaused {
+                isPaused = false
+        }
+    }
+
+    private func startEyesAnimationIfNeeded() {
+        guard eyesAnimationTask == nil, !isPaused else { return }
+        eyesAnimationTask = Task {
+            while !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 1.5)) {
+                        eyesLookUp.toggle()
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+            }
+        }
+    }
+
+    private func stopEyesAnimation() {
+        eyesAnimationTask?.cancel()
+        eyesAnimationTask = nil
     }
 
     private func setupNewShuffledLevel() {
