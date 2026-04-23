@@ -6,8 +6,10 @@
 //
 
 import SwiftUI
+import AVFoundation
 
 struct ContentView: View {
+    @State private var levelAudio = LevelCompleteAudioPlayer()
     @State private var eyesLookUp = false
     @State private var showHappyCat = false
     @State private var showSadCat = false
@@ -20,6 +22,7 @@ struct ContentView: View {
     @State private var panelItemFrames: [String: CGRect] = [:]
     @State private var dragOffsets: [String: CGSize] = [:]
     @State private var matchedFruits: Set<String> = []
+    @State private var showConfetti = false
 
     private let topFruits = ["bananaImage", "appleImage", "raspberryImage", "strawberryImage", "kiwiImage"]
 
@@ -110,7 +113,7 @@ struct ContentView: View {
                 }
                 .ignoresSafeArea(edges: .bottom)
 
-                if isLevelCompleted {
+                if showConfetti {
                     ConfettiView()
                         .transition(.opacity)
                         .allowsHitTesting(false)
@@ -338,20 +341,30 @@ struct ContentView: View {
     private func completeLevel() {
         happyResetTask?.cancel()
         sadResetTask?.cancel()
+        levelAudio.stop()
         withAnimation(.easeInOut(duration: 0.4)) {
             showHappyCat = false
             showSadCat = false
             isLevelCompleted = true
+            showConfetti = true
+        }
+
+        levelAudio.playLevelCompleteSound(fallbackDuration: 2.5) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                showConfetti = false
+            }
         }
     }
 
     private func restartCurrentLevel() {
         happyResetTask?.cancel()
         sadResetTask?.cancel()
+        levelAudio.stop()
         withAnimation(.easeInOut(duration: 0.35)) {
             showHappyCat = false
             showSadCat = false
             isLevelCompleted = false
+            showConfetti = false
             matchedFruits.removeAll()
             dragOffsets.removeAll()
             floatingFruitFrames.removeAll()
@@ -437,6 +450,77 @@ private struct PanelFruitFrameKey: PreferenceKey {
     static var defaultValue: [String: CGRect] = [:]
     static func reduce(value: inout [String: CGRect], nextValue: () -> [String: CGRect]) {
         value.merge(nextValue()) { _, new in new }
+    }
+}
+
+private final class LevelCompleteAudioPlayer: NSObject, AVAudioPlayerDelegate {
+    private var player: AVAudioPlayer?
+    private var fallbackTask: Task<Void, Never>?
+    private var onFinished: (() -> Void)?
+
+    func playLevelCompleteSound(fallbackDuration: Double, onFinished: @escaping () -> Void) {
+        stop()
+        self.onFinished = onFinished
+
+        guard let (url, ext) = Self.resolveSoundURL() else {
+            scheduleFallback(seconds: fallbackDuration)
+            return
+        }
+
+        do {
+            let audioPlayer = try AVAudioPlayer(contentsOf: url, fileTypeHint: ext)
+            audioPlayer.delegate = self
+            audioPlayer.prepareToPlay()
+            player = audioPlayer
+
+            if audioPlayer.play() {
+                return
+            }
+            scheduleFallback(seconds: fallbackDuration)
+        } catch {
+            scheduleFallback(seconds: fallbackDuration)
+        }
+    }
+
+    func stop() {
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        player?.stop()
+        player = nil
+        onFinished = nil
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        fallbackTask?.cancel()
+        fallbackTask = nil
+        self.player = nil
+        let callback = onFinished
+        onFinished = nil
+        callback?()
+    }
+
+    private func scheduleFallback(seconds: Double) {
+        fallbackTask?.cancel()
+        fallbackTask = Task {
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            if Task.isCancelled { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                let callback = self.onFinished
+                self.onFinished = nil
+                callback?()
+            }
+        }
+    }
+
+    private static func resolveSoundURL() -> (URL, String)? {
+        let candidates = ["mp3", "wav", "m4a", "caf", "aiff"]
+        for ext in candidates {
+            if let url = Bundle.main.url(forResource: "phatphrogstudio-phatphrogstudiocom-victory-fanfare-2-474663", withExtension: ext) {
+                return (url, ext)
+            }
+        }
+        return nil
     }
 }
 
